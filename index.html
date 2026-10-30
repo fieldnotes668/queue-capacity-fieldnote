@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="An interactive, transparent model of how a short traffic burst creates queue backlog and how worker capacity determines recovery time.">
+  <title>When a Queue Stops Catching Up — An Interactive Capacity Note</title>
+  <style>
+    :root { color-scheme: light; --ink:#17251f; --muted:#56645d; --line:#d5dfd7; --paper:#f8faf6; --white:#fff; --green:#1c7253; --green-dark:#15533e; --mint:#d7eee0; --amber:#b65d22; --amber-light:#fff0dd; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.58 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    a { color:var(--green-dark); text-underline-offset:3px; }
+    .wrap { max-width:1120px; margin:auto; padding:0 24px; }
+    header { border-bottom:1px solid var(--line); background:#edf4ec; }
+    .mast { display:flex; align-items:center; justify-content:space-between; min-height:60px; gap:16px; }
+    .brand { font-size:.78rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; color:var(--green-dark); }
+    .mast span:last-child { color:var(--muted); font-size:.88rem; }
+    .hero { padding:72px 0 64px; display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:40px; align-items:end; }
+    .eyebrow { margin:0 0 12px; color:var(--green); text-transform:uppercase; font-weight:800; letter-spacing:.13em; font-size:.76rem; }
+    h1 { font-family:Georgia,"Times New Roman",serif; font-weight:normal; font-size:clamp(2.9rem,6vw,5.4rem); line-height:1.05; letter-spacing:-.045em; margin:0 0 22px; max-width:730px; }
+    .lede { font-size:1.16rem; max-width:640px; color:#33483c; margin:0; }
+    .hero-note { border-left:3px solid var(--green); padding:4px 0 4px 18px; font-size:.91rem; color:var(--muted); }
+    .hero-note strong { display:block; color:var(--ink); margin-bottom:7px; }
+    main { padding:40px 0 80px; }
+    .lab { display:grid; grid-template-columns:300px minmax(0,1fr); gap:22px; align-items:start; }
+    .panel { background:var(--white); border:1px solid var(--line); border-radius:18px; box-shadow:0 10px 30px rgba(25,54,37,.035); }
+    .controls { padding:26px; }
+    h2 { font-family:Georgia,"Times New Roman",serif; font-size:2rem; font-weight:normal; line-height:1.16; margin:0 0 13px; letter-spacing:-.025em; }
+    h3 { font-size:1rem; margin:0 0 8px; }
+    .small { color:var(--muted); font-size:.9rem; margin:0 0 24px; }
+    .control { margin:25px 0; }
+    .control label { display:flex; justify-content:space-between; gap:12px; font-size:.86rem; font-weight:700; margin-bottom:9px; }
+    .control output { color:var(--green-dark); font-variant-numeric:tabular-nums; white-space:nowrap; }
+    input[type=range] { width:100%; accent-color:var(--green); cursor:pointer; }
+    input[type=range]:focus-visible { outline:2px solid var(--green-dark); outline-offset:4px; }
+    .control small { color:var(--muted); display:block; line-height:1.35; }
+    .reset { font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--paper); border-radius:9px; padding:9px 14px; color:var(--ink); }
+    .reset:hover { background:#eaf3ec; }
+    .results { padding:26px 30px 30px; }
+    .results-head { display:flex; justify-content:space-between; gap:18px; align-items:start; margin-bottom:18px; }
+    .badge { background:var(--mint); color:var(--green-dark); border-radius:999px; padding:4px 11px; font-size:.75rem; font-weight:800; white-space:nowrap; }
+    .badge.warn { color:#7f3a0f; background:var(--amber-light); }
+    .metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:20px; }
+    .metric { border:1px solid var(--line); border-radius:12px; padding:14px 15px; min-height:97px; }
+    .metric span { display:block; color:var(--muted); font-size:.78rem; line-height:1.25; }
+    .metric strong { display:block; margin-top:9px; font-size:1.72rem; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.04em; }
+    .chart-wrap { border:1px solid var(--line); border-radius:12px; padding:14px 12px 4px; background:#fcfdfa; }
+    svg { width:100%; display:block; height:auto; overflow:visible; }
+    .chart-axis { font-size:11px; fill:#64736b; font-family:system-ui,sans-serif; }
+    .chart-grid { stroke:#dce6dd; stroke-width:1; }
+    .chart-line { fill:none; stroke:var(--green); stroke-width:3; stroke-linejoin:round; stroke-linecap:round; }
+    .chart-area { fill:#bee2cb; opacity:.62; }
+    .chart-burst { fill:#fff0dd; }
+    .chart-capacity { stroke:var(--amber); stroke-width:1.5; stroke-dasharray:5 5; }
+    .legend { display:flex; gap:18px; flex-wrap:wrap; color:var(--muted); font-size:.77rem; padding:8px 4px 5px; }
+    .key { display:inline-block; width:15px; height:3px; vertical-align:middle; margin-right:6px; background:var(--green); }
+    .key.burst { background:var(--amber-light); border:1px solid #d9b58d; height:10px; }
+    .readout { background:#edf5ef; border-left:3px solid var(--green); padding:13px 16px; margin:20px 0 0; color:#2e4738; font-size:.9rem; }
+    .readout.warn { background:var(--amber-light); border-color:var(--amber); color:#623c1e; }
+    .essay { max-width:850px; margin:70px auto 0; }
+    .essay section { padding:30px 0; border-top:1px solid var(--line); }
+    .essay p { color:#32463a; margin:0 0 15px; }
+    .formula { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.88rem; background:#e9f1e9; border-radius:10px; padding:17px 20px; white-space:normal; overflow-wrap:anywhere; color:#214e38; margin:22px 0; }
+    .callout { background:var(--white); border:1px solid var(--line); border-radius:14px; padding:20px 23px; }
+    ul { padding-left:22px; }
+    li { margin:7px 0; }
+    footer { border-top:1px solid var(--line); padding:28px 0 50px; color:var(--muted); font-size:.8rem; }
+    @media(max-width:850px) { .hero { grid-template-columns:1fr; padding:55px 0; gap:25px; } .hero-note { max-width:540px; } .lab { grid-template-columns:1fr; } .controls { display:grid; grid-template-columns:repeat(2,1fr); column-gap:24px; } .controls h2,.controls .small,.controls .reset { grid-column:1/-1; } }
+    @media(max-width:580px) { .wrap { padding:0 16px; } .mast span:last-child { display:none; } .hero { padding:45px 0 38px; } .controls { display:block; } .results { padding:22px 17px; } .results-head { display:block; } .badge { display:inline-block; margin:7px 0 10px; } .metrics { grid-template-columns:1fr; } .metric { min-height:0; display:flex; justify-content:space-between; align-items:center; } .metric strong { margin:0; } .essay { margin-top:45px; } }
+  </style>
+</head>
+<body>
+  <header><div class="wrap mast"><span class="brand">Systems Fieldnotes</span><span>An interactive engineering note · 6 minute read</span></div></header>
+  <div class="wrap hero">
+    <div><p class="eyebrow">Queue capacity / model 01</p><h1>When a queue stops catching up</h1><p class="lede">A ten-minute traffic spike can leave work waiting long after the spike ends. Change the arrival rate and worker capacity below to see why.</p></div>
+    <div class="hero-note"><strong>What this model does</strong>It shows a simple FIFO queue with steady work per worker. It is deliberately deterministic so the cause of each change is visible.</div>
+  </div>
+  <main class="wrap">
+    <div class="lab" aria-label="Interactive queue model">
+      <section class="panel controls" aria-labelledby="controls-title">
+        <h2 id="controls-title">Set the load</h2><p class="small">The model runs for 60 minutes. A burst starts at minute 10.</p>
+        <div class="control"><label for="arrivals">Normal arrivals <output id="arrivals-value" for="arrivals">80 / min</output></label><input id="arrivals" type="range" min="20" max="220" step="10" value="80"><small>New jobs entering the queue each minute.</small></div>
+        <div class="control"><label for="workers">Workers <output id="workers-value" for="workers">5</output></label><input id="workers" type="range" min="1" max="12" step="1" value="5"><small>Each worker handles jobs independently.</small></div>
+        <div class="control"><label for="speed">Jobs per worker <output id="speed-value" for="speed">20 / min</output></label><input id="speed" type="range" min="5" max="35" step="5" value="20"><small>Assumes every job takes the same amount of work.</small></div>
+        <div class="control"><label for="burst">Burst multiplier <output id="burst-value" for="burst">2.0×</output></label><input id="burst" type="range" min="1" max="4" step="0.5" value="2"><small>Applies only during the shaded interval.</small></div>
+        <div class="control"><label for="duration">Burst duration <output id="duration-value" for="duration">10 min</output></label><input id="duration" type="range" min="5" max="25" step="5" value="10"><small>Afterward, arrivals return to normal.</small></div>
+        <button class="reset" id="reset" type="button">Reset example</button>
+      </section>
+      <section class="panel results" aria-labelledby="results-title">
+        <div class="results-head"><div><h2 id="results-title">The backlog, minute by minute</h2><p class="small">Jobs waiting after each minute of work.</p></div><span class="badge" id="status-badge">Recovers</span></div>
+        <div class="metrics" aria-live="polite"><div class="metric"><span>Peak waiting</span><strong id="peak">0</strong></div><div class="metric"><span>At minute 60</span><strong id="remaining">0</strong></div><div class="metric"><span>Clear after burst</span><strong id="clear-time">0 min</strong></div></div>
+        <div class="chart-wrap"><svg id="chart" viewBox="0 0 700 305" role="img" aria-labelledby="chart-title chart-desc"><title id="chart-title">Queue backlog over sixty minutes</title><desc id="chart-desc">The chart updates with the controls.</desc><g id="chart-content"></g></svg><div class="legend"><span><i class="key"></i> Waiting jobs</span><span><i class="key burst"></i> Traffic burst</span></div></div>
+        <p class="readout" id="readout" aria-live="polite"></p>
+      </section>
+    </div>
+    <article class="essay">
+      <section><h2>Why the queue can stay busy after traffic falls</h2><p>A worker pool has a maximum throughput. If 160 jobs arrive each minute while the workers finish only 100, the queue grows by 60 jobs per minute. When arrivals drop back to 80, the workers have just 20 spare slots per minute for old work. A 600-job backlog then needs about 30 more minutes to drain.</p><div class="formula">next backlog = max(0, current backlog + arrivals − completed jobs)</div><p>The model uses that rule once per minute. It assumes a FIFO queue, no job failures, no priority classes, and a fixed service rate. Real queues vary; the point here is to show the capacity relationship, not predict an exact production wait time.</p></section>
+      <section><h2>What the numbers mean</h2><p><strong>Peak waiting</strong> is the largest number of jobs left in the queue at the end of any simulated minute. <strong>At minute 60</strong> shows whether the backlog has cleared within the chart window. <strong>Clear after burst</strong> estimates the drain time from the end of the burst at the normal arrival rate. When normal arrivals already meet or exceed capacity, it reports “Never” because this simple model has no spare capacity to catch up.</p><p>The estimated drain time is a capacity calculation, not a promise to an individual request. A FIFO job's wait also depends on where it entered the queue and how long actual jobs take.</p></section>
+      <section><h2>Operational questions this model suggests</h2><div class="callout"><h3>Before adding more workers, ask:</h3><ul><li>Is the work safe to run concurrently, or will extra workers overload a database or provider?</li><li>Can arrivals be slowed with admission control before the queue becomes unbounded?</li><li>How old is the oldest queued job? A small queue of slow jobs may be worse than a large queue of quick ones.</li><li>Are failures and retries adding new work faster than workers can complete it?</li></ul></div><p style="margin-top:19px">A production dashboard should show arrival rate, completion rate, oldest-job age, retry volume, and queue length together. Queue length alone cannot tell you whether the system is recovering.</p></section>
+      <section><h2>Try two revealing cases</h2><p>First, set normal arrivals just below capacity and make the burst large. The queue eventually drains, but slowly. Then raise normal arrivals to match or exceed capacity. The burst may end, yet the queue never catches up because no spare capacity remains. That difference is easy to miss when looking only at the current traffic rate.</p></section>
+    </article>
+  </main>
+  <footer><div class="wrap">An independent educational model. No live service data, external scripts, or tracking.</div></footer>
+  <script>
+    const fields = ['arrivals','workers','speed','burst','duration'];
+    const defaults = { arrivals:80, workers:5, speed:20, burst:2, duration:10 };
+    const el = id => document.getElementById(id);
+    const svg = (tag, attrs) => { const node=document.createElementNS('http://www.w3.org/2000/svg',tag); for (const [key,value] of Object.entries(attrs)) node.setAttribute(key,String(value)); return node; };
+    function render(){
+      const v = Object.fromEntries(fields.map(id=>[id,Number(el(id).value)]));
+      el('arrivals-value').textContent=`${v.arrivals} / min`;
+      el('workers-value').textContent=String(v.workers);
+      el('speed-value').textContent=`${v.speed} / min`;
+      el('burst-value').textContent=`${v.burst.toFixed(1)}×`;
+      el('duration-value').textContent=`${v.duration} min`;
+      const cap=v.workers*v.speed, end=10+v.duration, values=[0];
+      for(let minute=1;minute<=60;minute++){
+        const incoming=v.arrivals*((minute>10 && minute<=end)?v.burst:1);
+        values.push(Math.max(0,values[minute-1]+incoming-cap));
+      }
+      const peak=Math.max(...values), tail=values[60], afterBurst=values[end];
+      const spare=cap-v.arrivals;
+      const drain=afterBurst===0?0:spare<=0?Infinity:Math.ceil(afterBurst/spare);
+      el('peak').textContent=Math.round(peak).toLocaleString();
+      el('remaining').textContent=Math.round(tail).toLocaleString();
+      el('clear-time').textContent=Number.isFinite(drain)?`${drain} min`:'Never';
+      const stable=spare>0;
+      const badge=el('status-badge'); badge.textContent=stable?'Recovers':'Cannot catch up'; badge.classList.toggle('warn',!stable);
+      const readout=el('readout'); readout.classList.toggle('warn',!stable);
+      readout.textContent=stable
+        ? `Normal capacity is ${cap} jobs/min against ${v.arrivals} arrivals/min. After the burst, ${spare} slots/min can work down the backlog${afterBurst ? `; the model needs about ${drain} minutes` : ''}.`
+        : `Normal arrivals (${v.arrivals}/min) meet or exceed capacity (${cap}/min). Even after the burst, this model has no spare capacity to clear queued work.`;
+      const g=el('chart-content'); g.replaceChildren();
+      const left=45, right=680, top=22, bottom=260, width=right-left, height=bottom-top;
+      const scale=Math.max(100,Math.ceil(peak/100)*100);
+      const x=i=>left+i/60*width, y=n=>bottom-n/scale*height;
+      g.append(svg('rect',{x:x(10),y:top,width:x(end)-x(10),height:height,class:'chart-burst'}));
+      for(let i=0;i<=4;i++){ const yy=top+i*height/4;g.append(svg('line',{x1:left,y1:yy,x2:right,y2:yy,class:'chart-grid'}));const label=svg('text',{x:left-9,y:yy+4,'text-anchor':'end',class:'chart-axis'});label.textContent=Math.round(scale*(1-i/4)).toLocaleString();g.append(label); }
+      [0,10,20,30,40,50,60].forEach(i=>{const label=svg('text',{x:x(i),y:bottom+25,'text-anchor':'middle',class:'chart-axis'});label.textContent=String(i);g.append(label);});
+      const points=values.map((n,i)=>`${x(i)},${y(n)}`).join(' ');
+      g.append(svg('polygon',{points:`${x(0)},${bottom} ${points} ${x(60)},${bottom}`,class:'chart-area'}));
+      g.append(svg('polyline',{points,class:'chart-line'}));
+      el('chart-desc').textContent=`Backlog peaks at ${Math.round(peak)} jobs and ends at ${Math.round(tail)} after 60 minutes. Traffic burst runs from minute 10 to minute ${end}.`;
+    }
+    fields.forEach(id=>el(id).addEventListener('input',render));
+    el('reset').addEventListener('click',()=>{fields.forEach(id=>el(id).value=defaults[id]);render();});
+    render();
+  </script>
+</body>
+</html>
